@@ -1,5 +1,5 @@
 import { ethers } from "ethers";
-import { config, CONTRACT_ABI } from "../config";
+import { config, CONTRACT_ABI } from "../../../config";
 
 export const generateChallenge = (): string => {
   // Generate 32 random bytes and convert to URL-safe base64

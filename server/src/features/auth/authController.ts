@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { AuthService } from "../services/authService";
-import { VerifyRequest } from "../types";
+import { AuthService } from "./authService";
+import { VerifyRequest } from "./types";
 
 export class AuthController {
   static async getChallenge(_req: Request, res: Response) {

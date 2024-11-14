@@ -1,10 +1,12 @@
 import Phaser from "phaser";
 import { OwnedNft } from "alchemy-sdk";
-import { MainScene } from "./scenes/MainScene";
+import MainScene from "./scenes/MainScene";
+import { PlayerSelectData } from "./types";
 
 export const createGameConfig = (
   parent: string,
-  nfts: OwnedNft[]
+  nfts: OwnedNft[],
+  playerData: PlayerSelectData
 ): Phaser.Types.Core.GameConfig => ({
   type: Phaser.AUTO,
   parent,
@@ -17,9 +19,9 @@ export const createGameConfig = (
   physics: {
     default: "arcade",
     arcade: {
-      gravity: { x: 0, y: 300 },
+      gravity: { x: 0, y: 0 },
       debug: false,
     },
   },
-  scene: [new MainScene({ nfts })],
+  scene: [new MainScene({ nfts, playerData })],
 });

@@ -1,269 +1,366 @@
-import Phaser from "phaser";
 import { OwnedNft } from "alchemy-sdk";
-import { CONFIG } from "../../config";
+import { socket } from "../services/socket";
+import Phaser from "phaser";
+import { GameState, PlayerSelectData } from "../types";
 
-export class MainScene extends Phaser.Scene {
+// Define a new class extending Phaser.Physics.Arcade.Sprite
+class PlayerSprite extends Phaser.Physics.Arcade.Sprite {
+  playerText!: Phaser.GameObjects.Text;
+}
+
+export default class MainScene extends Phaser.Scene {
   private playerNfts: OwnedNft[] = [];
-  private selectedIndex = 0;
-  private itemBoxes: Phaser.GameObjects.Rectangle[] = [];
-  private itemSprites: Phaser.GameObjects.Image[] = [];
+  private players: Map<string, PlayerSprite>;
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
+  private slimes!: Phaser.Physics.Arcade.Group;
 
-  private readonly MENU_WIDTH = 200;
-  private readonly GRID_COLS = 3;
-  private readonly GRID_ROWS = 5;
-  private readonly ITEM_SIZE = 80;
-  private readonly ITEM_PADDING = 8;
-
-  private gameState: "inventory" | "playing" = "inventory";
-  private activePlayer?: Phaser.Physics.Arcade.Image;
-  private playerSpeed = 200;
-
-  constructor(data: { nfts: OwnedNft[] }) {
+  constructor({
+    nfts,
+    playerData,
+  }: {
+    nfts: OwnedNft[];
+    playerData: PlayerSelectData;
+  }) {
     super({ key: "MainScene" });
-    this.playerNfts = data.nfts;
+    this.playerNfts = nfts;
+    console.log(playerData);
+    console.log(this.playerNfts);
+    this.players = new Map();
   }
 
   preload() {
-    this.playerNfts.forEach((nft) => {
-      this.load.image(nft.contract.address, nft.image.originalUrl);
+    // Load the tilemap JSON file - updated for latest Phaser
+    this.load.tilemapTiledJSON("map", "assets/maps/level.json");
+
+    // Load the tileset image
+    this.load.image("plains", "assets/maps/plains.png");
+
+    // Load existing sprite sheets
+    this.load.spritesheet("player1", "assets/player1.png", {
+      frameWidth: 48,
+      frameHeight: 48,
+    });
+    this.load.spritesheet("player2", "assets/player2.png", {
+      frameWidth: 48,
+      frameHeight: 48,
+    });
+    this.load.spritesheet("slime", "assets/slime.png", {
+      frameWidth: 32,
+      frameHeight: 32,
     });
   }
 
   create() {
-    // Create cursor keys
+    // Create the tilemap
+    const map = this.make.tilemap({ key: "map" });
+
+    // Add the tileset image to the map
+    const tileset = map.addTilesetImage("plains", "plains")!;
+
+    // Create the layers
+    const layer1 = map.createLayer("Tile Layer 1", tileset, 0, 0);
+    const layer2 = map.createLayer("Tile Layer 2", tileset, 0, 0);
+
+    // Scale the map to match your game's scale (if needed)
+    layer1?.setScale(1);
+    layer2?.setScale(1);
+
+    this.players = new Map();
     this.cursors = this.input.keyboard!.createCursorKeys();
 
-    // Create the menu background
-    this.createMenuBackground();
+    // Create animations for both player sprites
+    ["player1", "player2"].forEach((spriteId) => {
+      // Create animations for this sprite
+      this.anims.create({
+        key: `${spriteId}_idleDown`,
+        frames: this.anims.generateFrameNumbers(spriteId, { start: 0, end: 5 }),
+        frameRate: 10,
+        repeat: -1,
+      });
 
-    // Create the grid of item boxes
-    this.createItemGrid();
+      this.anims.create({
+        key: `${spriteId}_idleRight`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 6,
+          end: 11,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
 
-    // Highlight the first box
-    this.updateSelection();
-  }
+      this.anims.create({
+        key: `${spriteId}_idleUp`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 12,
+          end: 17,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
 
-  private createMenuBackground() {
-    // Left panel background
-    const leftPanel = this.add.rectangle(0, 0, this.MENU_WIDTH, 600, 0x2d2d2d);
-    leftPanel.setOrigin(0, 0);
-    leftPanel.setAlpha(0.9);
+      this.anims.create({
+        key: `${spriteId}_walkDown`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 18,
+          end: 23,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
 
-    // Right panel background
-    const rightPanel = this.add.rectangle(
-      this.MENU_WIDTH,
-      0,
-      800 - this.MENU_WIDTH,
-      600,
-      parseInt(CONFIG.inventoryBgColor)
-    );
-    rightPanel.setOrigin(0, 0);
-    rightPanel.setAlpha(0.9);
+      this.anims.create({
+        key: `${spriteId}_walkRight`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 24,
+          end: 29,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
 
-    // Add "Inventory" text
-    const inventoryText = this.add.text(20, 20, "Inventory", {
-      fontSize: "24px",
-      color: "#ffffff",
-      fontFamily: "Arial",
+      this.anims.create({
+        key: `${spriteId}_walkUp`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 30,
+          end: 35,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
+
+      this.anims.create({
+        key: `${spriteId}_attackDown`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 36,
+          end: 39,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
+
+      this.anims.create({
+        key: `${spriteId}_attackRight`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 42,
+          end: 45,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
+
+      this.anims.create({
+        key: `${spriteId}_attackUp`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 48,
+          end: 51,
+        }),
+        frameRate: 10,
+        repeat: -1,
+      });
+
+      this.anims.create({
+        key: `${spriteId}_die`,
+        frames: this.anims.generateFrameNumbers(spriteId, {
+          start: 54,
+          end: 56,
+        }),
+        frameRate: 10,
+        repeat: 0,
+      });
     });
-    inventoryText.setShadow(2, 2, "#000000", 2);
-  }
 
-  private createItemGrid() {
-    const startX = this.MENU_WIDTH + 50;
-    const startY = 50;
-
-    for (let i = 0; i < this.GRID_ROWS * this.GRID_COLS; i++) {
-      const row = Math.floor(i / this.GRID_COLS);
-      const col = i % this.GRID_COLS;
-      const x = startX + col * (this.ITEM_SIZE + this.ITEM_PADDING);
-      const y = startY + row * (this.ITEM_SIZE + this.ITEM_PADDING);
-
-      // Create item box
-      const box = this.add.rectangle(
-        x,
-        y,
-        this.ITEM_SIZE,
-        this.ITEM_SIZE,
-        0x4d4d4d
-      );
-      box.setOrigin(0, 0);
-      box.setStrokeStyle(2, 0x666666);
-      this.itemBoxes.push(box);
-
-      // Add NFT if available
-      if (i < this.playerNfts.length) {
-        const sprite = this.add.image(
-          x + this.ITEM_SIZE / 2,
-          y + this.ITEM_SIZE / 2,
-          this.playerNfts[i].contract.address
-        );
-        sprite.setDisplaySize(this.ITEM_SIZE - 20, this.ITEM_SIZE - 20);
-        this.itemSprites.push(sprite);
-      }
-    }
-  }
-
-  private selectedItemSprite?: Phaser.GameObjects.Image;
-  private selectedItemName?: Phaser.GameObjects.Text;
-  private selectedItemDescription?: Phaser.GameObjects.Text;
-
-  private updateSelectedItemDisplay() {
-    // Clean up previous display
-    this.selectedItemSprite?.destroy();
-    this.selectedItemName?.destroy();
-    this.selectedItemDescription?.destroy();
-
-    if (this.selectedIndex < this.playerNfts.length) {
-      const selectedNft = this.playerNfts[this.selectedIndex];
-
-      // Display larger image
-      this.selectedItemSprite = this.add.image(
-        this.MENU_WIDTH / 2,
-        200,
-        selectedNft.contract.address
-      );
-      this.selectedItemSprite.setDisplaySize(160, 160);
-
-      // Display name
-      this.selectedItemName = this.add.text(
-        10,
-        300,
-        selectedNft.name || "Untitled",
-        {
-          fontSize: "16px",
-          color: "#ffffff",
-          fontFamily: "Arial",
-          wordWrap: { width: this.MENU_WIDTH - 20 },
-        }
-      );
-
-      // Display description
-      this.selectedItemDescription = this.add.text(
-        10,
-        340,
-        selectedNft.description || "No description available",
-        {
-          fontSize: "14px",
-          color: "#cccccc",
-          fontFamily: "Arial",
-          wordWrap: { width: this.MENU_WIDTH - 20 },
-        }
-      );
-    }
-  }
-
-  private updateSelection() {
-    this.itemBoxes.forEach((box, index) => {
-      if (index === this.selectedIndex) {
-        box.setStrokeStyle(3, 0xffff00);
-      } else {
-        box.setStrokeStyle(2, 0x666666);
-      }
+    // Create slime animations
+    this.anims.create({
+      key: "slimeIdleDown",
+      frames: this.anims.generateFrameNumbers("slime", { start: 0, end: 3 }),
+      frameRate: 5,
+      repeat: -1,
     });
-    this.updateSelectedItemDisplay();
+
+    this.anims.create({
+      key: "slimeIdleRight",
+      frames: this.anims.generateFrameNumbers("slime", { start: 7, end: 10 }),
+      frameRate: 5,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeIdleUp",
+      frames: this.anims.generateFrameNumbers("slime", { start: 14, end: 17 }),
+      frameRate: 5,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeHopDown",
+      frames: this.anims.generateFrameNumbers("slime", { start: 21, end: 26 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeHopRight",
+      frames: this.anims.generateFrameNumbers("slime", { start: 28, end: 33 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeHopUp",
+      frames: this.anims.generateFrameNumbers("slime", { start: 35, end: 40 }),
+      frameRate: 10,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeJumpDown",
+      frames: this.anims.generateFrameNumbers("slime", { start: 42, end: 48 }),
+      frameRate: 15,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeJumpRight",
+      frames: this.anims.generateFrameNumbers("slime", { start: 49, end: 55 }),
+      frameRate: 15,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeJumpUp",
+      frames: this.anims.generateFrameNumbers("slime", { start: 56, end: 62 }),
+      frameRate: 15,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeConfuseDown",
+      frames: this.anims.generateFrameNumbers("slime", { start: 63, end: 65 }),
+      frameRate: 5,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeConfuseRight",
+      frames: this.anims.generateFrameNumbers("slime", { start: 66, end: 68 }),
+      frameRate: 5,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeConfuseUp",
+      frames: this.anims.generateFrameNumbers("slime", { start: 69, end: 71 }),
+      frameRate: 5,
+      repeat: -1,
+    });
+
+    this.anims.create({
+      key: "slimeDie",
+      frames: this.anims.generateFrameNumbers("slime", { start: 72, end: 76 }),
+      frameRate: 10,
+      repeat: 0,
+    });
+
+    this.slimes = this.physics.add.group();
+
+    for (let i = 0; i < 10; i++) {
+      const x = Phaser.Math.Between(0, 800);
+      const y = Phaser.Math.Between(0, 600);
+      const slime = this.slimes.create(x, y, "slime");
+      slime.play("slimeIdleDown");
+    }
+
+    socket.on("gameState", (gameState: GameState) => {
+      // Update or create players
+      gameState.players.forEach((playerData) => {
+        let player = this.players.get(playerData.id) as PlayerSprite;
+
+        if (!player) {
+          player = this.physics.add.sprite(
+            playerData.x,
+            playerData.y,
+            playerData.spriteId
+          ) as PlayerSprite;
+          player.setScale(1.5);
+
+          if (playerData.id === socket.id) {
+            this.cameras.main.startFollow(player);
+            this.cameras.main.setFollowOffset(
+              -player.width / 2,
+              -player.height / 2
+            );
+          }
+
+          const displayName = playerData.name || "Player";
+          const playerText = this.add.text(
+            playerData.x,
+            playerData.y - 40,
+            displayName,
+            {
+              fontSize: "16px",
+              color: "#ffffff",
+              backgroundColor: "#000000",
+              padding: { x: 4, y: 4 },
+            }
+          );
+          playerText.setOrigin(0.5);
+          player.playerText = playerText;
+
+          this.players.set(playerData.id, player);
+        }
+
+        // Update player position and animation
+        player.x = playerData.x;
+        player.y = playerData.y;
+        player.playerText.x = playerData.x;
+        player.playerText.y = playerData.y - 40;
+
+        if (playerData.animation) {
+          player.anims.play(
+            `${playerData.spriteId}_${playerData.animation}`,
+            true
+          );
+          player.flipX = playerData.flipX ?? false;
+        }
+      });
+
+      // Remove disconnected players
+      const currentPlayerIds = gameState.players.map((p) => p.id);
+      Array.from(this.players.keys()).forEach((playerId) => {
+        if (!currentPlayerIds.includes(playerId)) {
+          const player = this.players.get(playerId);
+          player?.playerText.destroy(); // Destroy the text object
+          player?.destroy();
+          this.players.delete(playerId);
+        }
+      });
+
+      // Update slimes
+      gameState.slimes.forEach((slimeData, index) => {
+        let slime = this.slimes.getChildren()[
+          index
+        ] as Phaser.Physics.Arcade.Sprite;
+        if (!slime) {
+          slime = this.slimes.create(slimeData.x, slimeData.y, "slime");
+        }
+        slime.x = slimeData.x;
+        slime.y = slimeData.y;
+        if (slimeData.animation) {
+          slime.play(slimeData.animation, true);
+          slime.flipX = slimeData.flipX ?? false;
+        }
+      });
+    });
   }
 
   update() {
-    if (this.gameState === "inventory") {
-      this.handleInventoryControls();
-    } else {
-      this.handlePlayingControls();
-    }
-  }
+    const inputState = {
+      left: this.cursors.left.isDown,
+      right: this.cursors.right.isDown,
+      up: this.cursors.up.isDown,
+      down: this.cursors.down.isDown,
+    };
 
-  private handleInventoryControls() {
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) {
-      if (this.selectedIndex % this.GRID_COLS < this.GRID_COLS - 1) {
-        this.selectedIndex++;
-        this.updateSelection();
-      }
-    } else if (Phaser.Input.Keyboard.JustDown(this.cursors.left)) {
-      if (this.selectedIndex % this.GRID_COLS > 0) {
-        this.selectedIndex--;
-        this.updateSelection();
-      }
-    } else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) {
-      if (
-        this.selectedIndex + this.GRID_COLS <
-        this.GRID_COLS * this.GRID_ROWS
-      ) {
-        this.selectedIndex += this.GRID_COLS;
-        this.updateSelection();
-      }
-    } else if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) {
-      if (this.selectedIndex - this.GRID_COLS >= 0) {
-        this.selectedIndex -= this.GRID_COLS;
-        this.updateSelection();
-      }
-    } else if (Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
-      this.startPlaying();
-    }
-  }
-
-  private handlePlayingControls() {
-    if (!this.activePlayer) return;
-
-    // Reset velocity
-    this.activePlayer.setVelocity(0);
-
-    // Handle movement
-    if (this.cursors.left.isDown) {
-      this.activePlayer.setVelocityX(-this.playerSpeed);
-    } else if (this.cursors.right.isDown) {
-      this.activePlayer.setVelocityX(this.playerSpeed);
-    }
-
-    if (this.cursors.up.isDown) {
-      this.activePlayer.setVelocityY(-this.playerSpeed);
-    } else if (this.cursors.down.isDown) {
-      this.activePlayer.setVelocityY(this.playerSpeed);
-    }
-
-    // Press ESC to return to inventory
-    if (this.input.keyboard?.addKey("ESC").isDown) {
-      this.returnToInventory();
-    }
-  }
-
-  private startPlaying() {
-    if (this.selectedIndex >= this.playerNfts.length) return;
-
-    this.gameState = "playing";
-
-    // Hide inventory UI
-    this.itemBoxes.forEach((box) => box.setVisible(false));
-    this.itemSprites.forEach((sprite) => sprite.setVisible(false));
-    this.selectedItemSprite?.setVisible(false);
-    this.selectedItemName?.setVisible(false);
-    this.selectedItemDescription?.setVisible(false);
-
-    // Create player sprite
-    const selectedNft = this.playerNfts[this.selectedIndex];
-    this.activePlayer = this.physics.add.image(
-      400,
-      300,
-      selectedNft.contract.address
-    );
-    this.activePlayer.setDisplaySize(64, 64);
-
-    // Enable physics
-    this.activePlayer.setCollideWorldBounds(true);
-  }
-
-  private returnToInventory() {
-    this.gameState = "inventory";
-
-    // Show inventory UI
-    this.itemBoxes.forEach((box) => box.setVisible(true));
-    this.itemSprites.forEach((sprite) => sprite.setVisible(true));
-    this.selectedItemSprite?.setVisible(true);
-    this.selectedItemName?.setVisible(true);
-    this.selectedItemDescription?.setVisible(true);
-
-    // Remove player sprite
-    this.activePlayer?.destroy();
-    this.activePlayer = undefined;
+    socket.emit("playerInput", inputState);
   }
 }

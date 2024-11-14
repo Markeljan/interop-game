@@ -1,5 +1,5 @@
-import { config } from "../config";
-import { generateChallenge, getContractAddress } from "../utils/ethereum";
+import { config } from "../../config";
+import { generateChallenge, getContractAddress } from "./utils/ethereum";
 
 // should use redis or a database
 const challenges = new Map<string, string>();
