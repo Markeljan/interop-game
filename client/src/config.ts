@@ -27,6 +27,7 @@ const AUTH = {
 const GAME = {
   title: import.meta.env.VITE_GAME_TITLE || "Game",
   inventoryBgColor: import.meta.env.VITE_INVENTORY_BG_COLOR || "0x2d2d2d",
+  socketUrl: import.meta.env.VITE_SOCKET_URL || "http://localhost:3022",
 } as const;
 
 // Alchemy Configuration
