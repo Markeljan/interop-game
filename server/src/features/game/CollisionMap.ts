@@ -1,5 +1,5 @@
 import { LevelData } from "./types";
-import levelData from "./level.json";
+import levelData from "./Level.json";
 
 export class CollisionMap {
   private width: number;
