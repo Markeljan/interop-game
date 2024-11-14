@@ -25,9 +25,9 @@ export function startServer(port: number) {
   app.post("/api/verify", AuthController.verifyChallenge);
 
   // Static files
-  app.use(express.static(path.join(__dirname, "../../../client/dist")));
+  app.use(express.static(path.join(__dirname, "../../client/dist")));
   app.get("*", (_req, res) => {
-    res.sendFile(path.join(__dirname, "../../../client/dist/index.html"));
+    res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
   });
 
   // Socket setup
