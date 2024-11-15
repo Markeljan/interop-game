@@ -27,7 +27,9 @@ export function Game({ playerNfts }: { playerNfts: OwnedNft[] }) {
 
   return (
     <div className="relative">
-      {!playerData && <CharacterSelect onSelect={setPlayerData} />}
+      {!playerData && (
+        <CharacterSelect onSelect={setPlayerData} playerNfts={playerNfts} />
+      )}
       <div id="phaser-container" ref={containerRef} className="h-[600px]" />
     </div>
   );

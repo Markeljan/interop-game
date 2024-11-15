@@ -1,20 +1,36 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { socket } from "../services/socket";
+import { OwnedNft } from "alchemy-sdk";
 
-const SPRITE_OPTIONS = [
-  { id: "player1", label: "Character 1", imgSrc: "assets/player1.png" },
-  { id: "player2", label: "Character 2", imgSrc: "assets/player2.png" },
-];
+const nanDolan = "0x278e4AaF2b95e04fd5832810C3d98eb0a6C49D66";
 
 interface CharacterSelectProps {
   onSelect: (data: { playerName: string; selectedSprite: string }) => void;
+  playerNfts: OwnedNft[];
 }
 
 export const CharacterSelect: React.FC<CharacterSelectProps> = ({
   onSelect,
+  playerNfts,
 }) => {
+  const [spriteOptions, setSpriteOptions] = useState([
+    { id: "player1", label: "Character 1", imgSrc: "assets/player1.png" },
+    {
+      id: "player2",
+      label: "Character 2",
+      imgSrc: "assets/player2.png",
+      disabled: true,
+    },
+  ]);
   const [playerName, setPlayerName] = useState("");
-  const [selectedSprite, setSelectedSprite] = useState(SPRITE_OPTIONS[0].id);
+  const [selectedSprite, setSelectedSprite] = useState(spriteOptions[0].id);
+
+  useEffect(() => {
+    if (playerNfts.some((nft) => nft.contract.address === nanDolan)) {
+      const player2 = spriteOptions[1];
+      setSpriteOptions([spriteOptions[0], { ...player2, disabled: false }]);
+    }
+  }, [playerNfts, spriteOptions]);
 
   const handleSubmit = () => {
     const name = playerName.trim() || "Player";
@@ -34,7 +50,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
           className="w-52 px-4 py-2 mb-6 rounded focus:outline-none"
         />
         <div className="mb-6">
-          {SPRITE_OPTIONS.map((sprite) => (
+          {spriteOptions.map((sprite) => (
             <label
               key={sprite.id}
               className="flex items-center mb-2 cursor-pointer relative"
@@ -43,6 +59,7 @@ export const CharacterSelect: React.FC<CharacterSelectProps> = ({
                 type="radio"
                 name="spriteChoice"
                 value={sprite.id}
+                disabled={sprite.disabled}
                 checked={selectedSprite === sprite.id}
                 onChange={() => setSelectedSprite(sprite.id)}
                 className="form-radio h-4 w-4 text-blue-600"
