@@ -2,10 +2,10 @@
   "name": "my-project",
   "version": "1.0.0",
   "scripts": {
-    "build": "npm run build:client && npm run build:server",
-    "build:client": "cd client && npm run build",
-    "build:server": "cd server && npm run build",
-    "start": "cd server && npm start"
+    "build": "bun run build:client && bun run build:server",
+    "build:client": "cd client && bun run build",
+    "build:server": "cd server && bun run build",
+    "start": "cd server && bun start"
   },
   "engines": {
     "node": ">=18.0.0"
